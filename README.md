@@ -25,7 +25,7 @@ The mock bank has no browser access. API routes check the Supabase session, use 
 
 The project is linked to [GREStudio](https://github.com/Skriller18/GREStudio) and deployed on [Vercel](https://gre-studio.vercel.app). Set all three Supabase variables in Vercel; the secret key must stay server-only.
 
-The one-time production seed script runs during a Vercel production build when the `seed/` package is present. It loads all questions and plans into Supabase and uploads the referenced diagrams and worked solution images to a private Storage bucket. The seed package and temporary public assets should be removed from the public repository after successful import. Later builds skip the seed automatically.
+The one-time production seed loaded all questions and plans into Supabase and uploaded the referenced diagrams and worked solution images to a private Storage bucket. The temporary seed package and public assets have been removed from the current repository. Later builds skip the seed automatically.
 
 ## Verify
 

@@ -181,7 +181,7 @@ export async function POST(req: NextRequest) {
         else {
           const q = (await bank(client, [body.question_id]))[0], value = body.response;
           const valid = value === null || (q.type === "text_completion"
-            ? Array.isArray(value) && value.length === q.choices.length && value.every((x, i) => Number.isInteger(x) && Number(x) >= 0 && Number(x) < q.choices[i].length)
+            ? Array.isArray(value) && value.length === q.choices.length && value.every((x, i) => Number.isInteger(x) && Number(x) >= -1 && Number(x) < q.choices[i].length)
             : q.type === "multi_choice" ? Array.isArray(value) && value.length <= (q.required || 10) && value.every(x => typeof x === "string" && /^[A-J]$/.test(x))
             : typeof value === "string" && value.length <= 100 && (q.type === "numeric_entry" || /^[A-J]$/.test(value)));
           if (!valid) return out({ error: "Invalid answer format." }, 400);

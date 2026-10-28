@@ -50,6 +50,10 @@ function formatAnswer(q: Question, answer: unknown) {
     return `${answer}: ${(q.choices as string[])?.[letters.indexOf(answer)] || ""}`;
   return String(answer);
 }
+function hasAnswer(q: Question, answer: unknown) {
+  if (answer == null) return false;
+  return q.type !== "text_completion" || (Array.isArray(answer) && answer.every(x => Number(x) >= 0));
+}
 
 export default function MockStudio() {
   const [catalog, setCatalog] = useState<Catalog | null>(null);
@@ -64,6 +68,7 @@ export default function MockStudio() {
   const [fractionBottom, setFractionBottom] = useState("");
   const [calculator, setCalculator] = useState(false);
   const [calcValue, setCalcValue] = useState("0");
+  const [confirmSubmit, setConfirmSubmit] = useState(false);
 
   const api = useCallback(async (params?: { action: string; [key: string]: unknown }, attemptId?: string) => {
     const { data: { session } } = await supabase().auth.getSession();
@@ -125,7 +130,7 @@ export default function MockStudio() {
   async function back() { setAttempt(null); setSelectedTest(null); await load(); }
   const q = attempt?.section?.questions?.[number];
   const seconds = attempt?.section?.deadline ? Math.max(0, Math.ceil((Date.parse(attempt.section.deadline) - now) / 1000)) : 0;
-  const answered = attempt?.section?.questions?.filter(item => attempt.answers[item.id] != null).length || 0;
+  const answered = attempt?.section?.questions?.filter(item => hasAnswer(item, attempt.answers[item.id])).length || 0;
   const answer = q ? attempt?.answers[q.id] : null;
   const select = (value: string | string[] | number[] | null) => { if (q) void act("answer", { question_id: q.id, response: value }); };
   const nav = (index: number) => { setNumber(index); void act("navigate", { index }); };
@@ -145,7 +150,7 @@ export default function MockStudio() {
       <small>BLANK {i + 1}</small><div className="mock-options">{choices.map((choice, j) =>
         <button key={j} className={`mock-option ${Array.isArray(response) && response[i] === j ? "selected" : ""}`}
           disabled={disabled} onClick={() => { const next = Array.isArray(response) ? [...response] : Array(question.choices!.length).fill(-1);
-            next[i] = j; if (next.every(x => x >= 0)) select(next); else setAttempt(a => a ? { ...a, answers: { ...a.answers, [question.id]: next } } : a); }}>
+            next[i] = j; select(next); }}>
           <span>{letters[j]}</span><MathText text={choice}/></button>)}</div></div>)}</div>;
     return <div className="mock-options">{(question.choices as string[] || []).map((choice, i) => {
       const letter = letters[i], selected = Array.isArray(response) ? response.includes(letter) : response === letter;
@@ -202,13 +207,9 @@ export default function MockStudio() {
             Next <ArrowRight size={16}/></button></div>
       </main><aside className="mock-navigator"><small>SECTION NAVIGATOR</small><h3>{sectionName(attempt.section)}</h3>
         <p>{answered} / {attempt.section.questions!.length} answered</p><div className="mock-number-grid">
-          {attempt.section.questions!.map((item, i) => <button key={item.id} className={`${i === number ? "active" : ""} ${attempt.answers[item.id] != null ? "answered" : ""} ${attempt.marks[item.id] ? "marked" : ""}`}
+          {attempt.section.questions!.map((item, i) => <button key={item.id} className={`${i === number ? "active" : ""} ${hasAnswer(item, attempt.answers[item.id]) ? "answered" : ""} ${attempt.marks[item.id] ? "marked" : ""}`}
             disabled={busy} onClick={() => nav(i)}>{i + 1}</button>)}</div>
-        <button className="button primary mock-submit" disabled={busy} onClick={() => {
-          const left = attempt.section!.questions!.length - answered;
-          if (window.confirm(`Submit ${sectionName(attempt.section!)}? You cannot return to it.${left ? ` ${left} unanswered.` : ""}`))
-            void act("advance");
-        }}>Submit section <ArrowRight size={16}/></button>
+        <button className="button primary mock-submit" disabled={busy} onClick={() => setConfirmSubmit(true)}>Submit section <ArrowRight size={16}/></button>
         {attempt.section.measure === "quant" && <><button className="button secondary mock-submit" onClick={() => setCalculator(v => !v)}>Calculator</button>
           {calculator && <div className="mock-calculator"><output>{calcValue}</output><div>{["7","8","9","÷","4","5","6","×","1","2","3","−","0",".","C","+","=","√"].map(key =>
             <button key={key} onClick={() => { if (key === "C") setCalcValue("0"); else if (key === "=" || key === "√") {
@@ -218,7 +219,15 @@ export default function MockStudio() {
                 setCalcValue(String(key === "√" ? Math.sqrt(result) : result)); } catch { setCalcValue("Error"); }
             } else setCalcValue(v => v === "0" || v === "Error" ? key : v + key); }}>{key}</button>)}</div></div>}</>}
         <p className="mock-note">Your answers save to your account. The active section timer continues if you leave this page.</p>
-      </aside></div></div>}
+      </aside></div>
+      {confirmSubmit && <div className="mock-confirm-backdrop" role="presentation" onClick={() => setConfirmSubmit(false)}>
+        <div className="mock-confirm" role="dialog" aria-modal="true" aria-labelledby="mock-confirm-title" onClick={e => e.stopPropagation()}>
+          <h3 id="mock-confirm-title">Submit {sectionName(attempt.section)}?</h3>
+          <p>You cannot return to this section. {attempt.section.questions!.length - answered} questions are unanswered.</p>
+          <div><button className="button secondary" onClick={() => setConfirmSubmit(false)}>Keep reviewing</button>
+            <button className="button primary" onClick={() => { setConfirmSubmit(false); void act("advance"); }}>Submit section</button></div>
+        </div></div>}
+    </div>}
     {attempt?.finished && <div className="mock-results">
       <button className="mock-back" onClick={back}><ArrowLeft size={16}/> All tests</button>
       <div className="eyebrow">PRACTICE TEST {pad(attempt.test_id)} · COMPLETE</div><h2>Your results</h2>
