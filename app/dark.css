@@ -1,0 +1,59 @@
+:root{color-scheme:dark;--ink:#f4f4f5;--muted:#999aa6;--soft:#0c0d10;--paper:#15161a;--line:#292a31;--purple:#b3a4f2;--purple-deep:#9584e4;--purple-pale:#242033;--navy:#15161a;--shadow:none}
+body{background:#0c0d10;color:var(--ink)}
+h1,h2,h3{letter-spacing:-.045em}
+.eyebrow,.eyebrow.light{color:#a79ae5}
+.button{border-radius:8px;font-weight:650;box-shadow:none;transition:background .15s,border-color .15s}
+.button:hover:not(:disabled){transform:none}
+.button.primary,.button.hero-button{background:#ded8ff;color:#14121f;box-shadow:none}
+.button.primary:hover,.button.hero-button:hover{background:#c9bfff}
+.button.secondary,.button.ghost{background:#1d1e23;color:#e5e3ef;border-color:#383942}
+.button.secondary:hover,.button.ghost:hover{background:#292a31}
+.button.selected-button{background:#34304a;color:#d5c9ff;border-color:#6d628f}
+.icon-button{color:#a5a5b0}
+.icon-button:hover{background:#24252b;color:#e7e4fc}
+.brand-symbol{border-radius:9px;background:#c1b5fb;color:#17141f;box-shadow:none}
+.auth-shell,.auth-form-wrap{background:#0c0d10}
+.auth-art{background:#14151b;border-right:1px solid var(--line)}
+.auth-art:before,.auth-art:after,.auth-orbit{display:none}
+.auth-art-content h1 em,.dashboard-hero h1 em{font-family:inherit;font-style:normal;font-weight:600;color:#b9aff1}
+.auth-art-content p,.dashboard-hero p{color:#a9a9b7}
+.auth-benefits svg{color:#a99bec}
+.auth-foot{color:#777986}
+.auth-card input,.search-field,.essay-editor,.numeric-input{background:#101115;color:#f3f3f5;border-color:#34353d;border-radius:8px}
+.auth-card input:focus,.search-field input:focus,.essay-editor:focus,.numeric-input:focus{border-color:#9384d5;box-shadow:0 0 0 3px #3b3555}
+.form-message,.notice{background:#242035;color:#d3c8ff;border-color:#48405e;border-radius:8px}
+.auth-switch button{color:#c4b7ff}
+.sidebar,.topbar{background:#101115;border-color:#25262d}
+.sidebar-brand,.breadcrumb strong{color:#f2f2f5}
+.sidebar-caption,.breadcrumb,.today-label{color:#757782}
+.nav-item{border-radius:8px;color:#a0a1ad}
+.nav-item:hover{background:#1d1e24;color:#e2dafa}
+.nav-item.active{background:#292633;color:#d4caff}
+.nav-dot{background:#b5a8ef}
+.sidebar-tip{background:#191a20;border:1px solid #292a31;border-radius:10px}
+.tip-icon,.avatar,.stat-icon.lavender,.stat-icon.peach,.stat-icon.mint,.module-icon,.palace-emoji,.empty-icon{background:#272430;color:#b8acf3}
+.sidebar-tip p,.user-meta small{color:#858691}
+.page-content{max-width:1500px}
+.dashboard-hero{background:#17181d;border:1px solid #303139;border-radius:12px}
+.dashboard-hero h1{font-size:clamp(34px,3.2vw,48px)}
+.hero-graphic,.graphic-ring,.graphic-center,.graphic-card{display:none}
+.stat-card,.module-card,.palace-selector,.essay-list-panel,.palace-main,.essay-workspace,.saved-words,.past-results,.loading-panel,.mock-intro,.test-runner,.result-panel{background:#15161a;border-color:#2e2f37;border-radius:11px;box-shadow:none}
+.module-card:hover{transform:none;box-shadow:none;border-color:#676179;background:#1b1c22}
+.module-copy strong,.essay-list-item strong{color:#ececf0}
+.module-copy span,.stat-card small,.page-heading p{color:#92939f}
+.module-arrow{color:#aaa4c1}
+.heading-pill,.palace-list-item,.essay-list-item,.answer-option{background:#1b1c22;border-color:#33343c;color:#dedee5}
+.palace-list-item:hover,.palace-list-item.selected,.essay-list-item:hover,.essay-list-item.selected{background:#292633}
+.palace-list-item strong,.palace-list-item small{color:#d8d8e0}
+.search-field input{color:#f5f5f6}
+.palace-header,.word-detail,.map-panel,.quiz-panel,.prompt-instructions,.sample-section,.sample-toggle,.test-format>div,.result-sections>div,.question-dots button,.saved-word-list button{background:#1b1c22;color:#e6e5eb;border-color:#33343b}
+.route-map{background:#15161a}
+.route-line path:first-child{stroke:#282638}
+.route-line path:last-child{stroke:#8577bd}
+.word-detail .meaning,.sample-copy,.prompt-instructions{color:#b8b7c2}
+.essay-workspace h2,.word-detail h3,.palace-header h2{color:#f1f1f4}
+.essay-editor{color:#ededf0}
+.sample-toggle{color:#d7cff8}
+.mock-note,.footer-note{color:#81828d}
+button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid #aa9ced;outline-offset:2px}
+@media(max-width:650px){.auth-art{min-height:255px}.dashboard-hero{min-height:230px}.stats-grid{grid-template-columns:repeat(3,1fr)}}

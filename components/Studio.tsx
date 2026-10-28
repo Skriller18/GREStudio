@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { ArrowLeft, ArrowRight, BookOpenText, BrainCircuit, Check, ChevronDown, CircleHelp, Clock3, Compass, LayoutDashboard, LogOut, Map, Menu, Play, RotateCcw, Save, Search, Sparkles, Target, Trophy, Volume2, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import type { Essay, Palace, Question } from "@/lib/types";
+import type { Essay, Palace } from "@/lib/types";
+import MockStudio from "./MockStudio";
 import palaceData from "@/data/palaces.json";
 import essayData from "@/data/essays.json";
 
@@ -12,15 +13,11 @@ const palaces = palaceData as Palace[];
 const essays = essayData as Essay[];
 type View = "dashboard" | "vocab" | "essays" | "mock";
 type RecordRow = { user_id: string; record_type: string; record_key: string; data: any; updated_at: string };
-type PublicQuestion = Omit<Question, "answer" | "explanation">;
-type MockData = { sections: { title: string; minutes: number; count: number }[]; questions: PublicQuestion[] };
-type Attempt = { section: number; index: number; answers: Record<string, string | string[]>; deadline: number; startedAt: number };
-type Result = { submittedAt: string; correct: number; total: number; bySection: { title: string; correct: number; total: number }[]; results: { id: string; answer: string | string[]; given: string | string[] | null; correct: boolean; explanation: string }[] };
 const nav: { view: View; label: string; icon: typeof LayoutDashboard }[] = [
   { view:"dashboard",label:"Overview",icon:LayoutDashboard },
   { view:"vocab",label:"Memory palaces",icon:Map },
   { view:"essays",label:"Essay practice",icon:BookOpenText },
-  { view:"mock",label:"Mock test",icon:Target },
+  { view:"mock",label:"Mock tests",icon:Target },
 ];
 const recordId = (type: string, key: string) => `${type}:${key}`;
 const initials = (user: User) => (user.email?.slice(0, 2) || "ST").toUpperCase();
@@ -51,11 +48,7 @@ export default function Studio() {
   const [sampleOpen, setSampleOpen] = useState(false);
   const [essaySeconds, setEssaySeconds] = useState(1800);
   const [essayRunning, setEssayRunning] = useState(false);
-  const [mock, setMock] = useState<MockData | null>(null);
-  const [attempt, setAttempt] = useState<Attempt | null>(null);
-  const [result, setResult] = useState<Result | null>(null);
-  const [mockBusy, setMockBusy] = useState(false);
-  const [now, setNow] = useState(Date.now());
+
 
   useEffect(() => {
     let active = true;
@@ -68,7 +61,7 @@ export default function Studio() {
   }, []);
 
   useEffect(() => {
-    if (!user) { setRecords({}); setAttempt(null); setResult(null); return; }
+    if (!user) { setRecords({}); return; }
     let active = true;
     supabase().from("study_records").select("*").eq("user_id", user.id).then(({ data, error }: { data: RecordRow[] | null; error: { message: string } | null }) => {
       if (!active) return;
@@ -77,17 +70,12 @@ export default function Studio() {
         const next: Record<string, RecordRow> = {};
         (data as RecordRow[] | null)?.forEach(row => { next[recordId(row.record_type, row.record_key)] = row; });
         setRecords(next);
-        const saved = next[recordId("mock_attempt", "active")]?.data as Attempt | undefined;
-        if (saved?.startedAt && saved?.answers) setAttempt(saved);
+
       }
     });
     return () => { active = false; };
   }, [user]);
 
-  useEffect(() => {
-    const handle = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(handle);
-  }, []);
   useEffect(() => {
     if (!essayRunning) return;
     const handle = window.setInterval(() => setEssaySeconds(s => {
@@ -104,23 +92,11 @@ export default function Studio() {
     const { error } = await supabase().from("study_records").upsert(row, { onConflict:"user_id,record_type,record_key" });
     if (error) setNotice(`Could not save progress: ${error.message}`);
   }, [user]);
-  const deleteRecord = useCallback(async (type: string, key: string) => {
-    if (!user) return;
-    setRecords(prev => { const next = {...prev}; delete next[recordId(type,key)]; return next; });
-    const { error } = await supabase().from("study_records").delete().eq("user_id",user.id).eq("record_type",type).eq("record_key",key);
-    if (error) setNotice(`Could not remove record: ${error.message}`);
-  }, [user]);
-
   useEffect(() => {
     if (!essayId || !user || !draft.trim()) return;
     const handle = window.setTimeout(() => { void saveRecord("essay_draft", String(essayId), { text:draft, savedAt:new Date().toISOString() }); }, 1200);
     return () => window.clearTimeout(handle);
   }, [essayId, draft, user, saveRecord]);
-
-  useEffect(() => {
-    if (view !== "mock" || mock) return;
-    fetch("/api/mock").then(r => r.json()).then(setMock).catch(() => setNotice("Could not load the mock test."));
-  }, [view, mock]);
 
   const navigate = (next: View) => { setView(next); setMobileMenu(false); window.scrollTo({top:0,behavior:"smooth"}); };
   const palace = palaces[palaceId-1];
@@ -128,7 +104,6 @@ export default function Studio() {
   const savedWords = Object.values(records).filter(r => r.record_type === "vocab_word" && r.data.saved);
   const masteredWords = Object.values(records).filter(r => r.record_type === "vocab_word" && r.data.mastered);
   const essayDrafts = Object.values(records).filter(r => r.record_type === "essay_draft");
-  const mockResults = Object.values(records).filter(r => r.record_type === "mock_result");
   const selectedEssay = essayId ? essays.find(e => e.id === essayId) : null;
   const wordState = records[recordId("vocab_word", currentWord.word)]?.data ?? {};
   const wordCount = draft.trim() ? draft.trim().split(/\s+/).length : 0;
@@ -170,58 +145,11 @@ export default function Studio() {
     const existing = records[recordId("vocab_word",currentWord.word)]?.data ?? {};
     void saveRecord("vocab_word", currentWord.word, {...existing,[field]:!existing[field],palaceId});
   }
-  function beginMock() {
-    if (!mock) return;
-    const start = Date.now();
-    const next: Attempt = {section:0,index:0,answers:{},deadline:start+mock.sections[0].minutes*60*1000,startedAt:start};
-    setAttempt(next); setResult(null); void saveRecord("mock_attempt","active",next);
-  }
-  function answerMock(q: PublicQuestion, value: string) {
-    if (!attempt) return;
-    const previous = attempt.answers[q.id];
-    const nextValue = q.type === "multi" ? (Array.isArray(previous) ? previous.includes(value) ? previous.filter(v=>v!==value) : [...previous,value].slice(0,2) : [value]) : value;
-    const next = {...attempt,answers:{...attempt.answers,[q.id]:nextValue}};
-    setAttempt(next); void saveRecord("mock_attempt","active",next);
-  }
-  async function submitMock(current: Attempt) {
-    setMockBusy(true);
-    const { data: { session } } = await supabase().auth.getSession();
-    if (!session) { setNotice("Your session expired. Sign in again."); setMockBusy(false); return; }
-    try {
-      const response = await fetch("/api/mock", {method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${session.access_token}`},body:JSON.stringify({answers:current.answers,startedAt:current.startedAt})});
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Submission failed.");
-      setResult(data as Result); setAttempt(null); void saveRecord("mock_result", data.submittedAt, data); await deleteRecord("mock_attempt","active");
-    } catch (error) { setNotice(error instanceof Error ? error.message : "Submission failed."); }
-    finally { setMockBusy(false); }
-  }
-  function nextQuestion() {
-    if (!attempt || !mock) return;
-    const sectionQuestions = mock.questions.filter(q => q.section === attempt.section);
-    if (attempt.index < sectionQuestions.length-1) {
-      const next = {...attempt,index:attempt.index+1}; setAttempt(next); void saveRecord("mock_attempt","active",next);
-    } else if (attempt.section < mock.sections.length-1) {
-      const nextSection = attempt.section+1;
-      const next = {...attempt,section:nextSection,index:0,deadline:Date.now()+mock.sections[nextSection].minutes*60*1000};
-      setAttempt(next); void saveRecord("mock_attempt","active",next);
-    } else void submitMock(attempt);
-  }
-  useEffect(() => {
-    if (!attempt || !mock || mockBusy || now < attempt.deadline) return;
-    if (attempt.section < 3) {
-      const nextSection = attempt.section+1;
-      const next = {...attempt,section:nextSection,index:0,deadline:Date.now()+mock.sections[nextSection].minutes*60*1000};
-      setAttempt(next); void saveRecord("mock_attempt","active",next);
-    } else void submitMock(attempt);
-    // Timer transitions only when the deadline expires.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [now, attempt?.deadline, mock, mockBusy]);
-
   if (loading) return <div className="loading-screen"><span className="brand-symbol">G</span><p>Opening your studio…</p></div>;
   if (!user) return <main className="auth-shell">
     <div className="auth-art">
       <div className="auth-brand"><span className="brand-symbol">G</span><span>GRE <b>Studio</b></span></div>
-      <div className="auth-art-content"><div className="eyebrow light">YOUR PREP, ALL IN ONE PLACE</div><h1>Make progress<br/><em>feel possible.</em></h1><p>One thoughtfully designed home for writing, vocabulary, and full-length practice.</p><div className="auth-benefits"><span><Map size={18}/> 102 visual memory palaces</span><span><BookOpenText size={18}/> 159 essay prompts</span><span><Target size={18}/> Original practice test</span></div></div>
+      <div className="auth-art-content"><div className="eyebrow light">YOUR PREP, ALL IN ONE PLACE</div><h1>Make progress<br/><em>feel possible.</em></h1><p>One thoughtfully designed home for writing, vocabulary, and full-length practice.</p><div className="auth-benefits"><span><Map size={18}/> 102 visual memory palaces</span><span><BookOpenText size={18}/> 159 essay prompts</span><span><Target size={18}/> 50 timed mock tests</span></div></div>
       <div className="auth-orbit orbit-one">A</div><div className="auth-orbit orbit-two">28</div><div className="auth-orbit orbit-three">✦</div>
       <div className="auth-foot">A focused space for ambitious minds.</div>
     </div>
@@ -243,9 +171,9 @@ export default function Studio() {
       {view==="dashboard"&&<div className="dashboard">
         <section className="dashboard-hero"><div><div className="eyebrow light">YOUR GRE JOURNEY STARTS HERE</div><h1>Good to see you,<br/><em>future grad.</em></h1><p>Everything you need to practice with purpose, in one calm place.</p><button className="button hero-button" onClick={()=>navigate("vocab")}>Explore memory palaces <ArrowRight size={18}/></button></div><div className="hero-graphic" aria-hidden="true"><div className="graphic-ring ring-1"/><div className="graphic-ring ring-2"/><div className="graphic-card card-a">abound <span>↗</span></div><div className="graphic-card card-b">Think. Write. Grow.</div><div className="graphic-center">G<span>✦</span></div></div></section>
         <div className="section-heading"><div><div className="eyebrow">AT A GLANCE</div><h2>Your workspace</h2></div><span className="section-subtitle">A little progress, every day.</span></div>
-        <div className="stats-grid"><div className="stat-card"><div className="stat-icon lavender"><BrainCircuit size={21}/></div><strong>{masteredWords.length}</strong><span>Words mastered</span><small>of 1,020 in 102 palaces</small></div><div className="stat-card"><div className="stat-icon peach"><BookOpenText size={21}/></div><strong>{essayDrafts.length}</strong><span>Essays started</span><small>159 prompts to explore</small></div><div className="stat-card"><div className="stat-icon mint"><Trophy size={21}/></div><strong>{mockResults.length}</strong><span>Tests completed</span><small>Original GRE-style practice</small></div></div>
+        <div className="stats-grid"><div className="stat-card"><div className="stat-icon lavender"><BrainCircuit size={21}/></div><strong>{masteredWords.length}</strong><span>Words mastered</span><small>of 1,020 in 102 palaces</small></div><div className="stat-card"><div className="stat-icon peach"><BookOpenText size={21}/></div><strong>{essayDrafts.length}</strong><span>Essays started</span><small>159 prompts to explore</small></div><div className="stat-card"><div className="stat-icon mint"><Trophy size={21}/></div><strong>50</strong><span>Mock tests</span><small>54 questions each</small></div></div>
         <div className="section-heading modules-heading"><div><div className="eyebrow">CHOOSE YOUR FOCUS</div><h2>Where will you begin?</h2></div></div>
-        <div className="module-grid"><button className="module-card vocab-card" onClick={()=>navigate("vocab")}><span className="module-icon"><Map size={26}/></span><span className="module-copy"><small>VOCABULARY</small><strong>Memory palaces</strong><span>Turn 1,020 words into places you can picture.</span></span><ArrowRight className="module-arrow" size={19}/></button><button className="module-card essay-card" onClick={()=>navigate("essays")}><span className="module-icon"><BookOpenText size={26}/></span><span className="module-copy"><small>ANALYTICAL WRITING</small><strong>Essay practice</strong><span>Think clearly, write confidently, and review models.</span></span><ArrowRight className="module-arrow" size={19}/></button><button className="module-card mock-card" onClick={()=>navigate("mock")}><span className="module-icon"><Target size={26}/></span><span className="module-copy"><small>TEST PRACTICE</small><strong>Mock test</strong><span>Find your rhythm with timed Verbal and Quant.</span></span><ArrowRight className="module-arrow" size={19}/></button></div>
+        <div className="module-grid"><button className="module-card vocab-card" onClick={()=>navigate("vocab")}><span className="module-icon"><Map size={26}/></span><span className="module-copy"><small>VOCABULARY</small><strong>Memory palaces</strong><span>Turn 1,020 words into places you can picture.</span></span><ArrowRight className="module-arrow" size={19}/></button><button className="module-card essay-card" onClick={()=>navigate("essays")}><span className="module-icon"><BookOpenText size={26}/></span><span className="module-copy"><small>ANALYTICAL WRITING</small><strong>Essay practice</strong><span>Think clearly, write confidently, and review models.</span></span><ArrowRight className="module-arrow" size={19}/></button><button className="module-card mock-card" onClick={()=>navigate("mock")}><span className="module-icon"><Target size={26}/></span><span className="module-copy"><small>TEST PRACTICE</small><strong>Mock tests</strong><span>Find your rhythm with timed Verbal and Quant.</span></span><ArrowRight className="module-arrow" size={19}/></button></div>
         <div className="footer-note">GRE Studio is an independent practice tool and is not affiliated with ETS.</div>
       </div>}
       {view==="vocab"&&<div className="feature-page">
@@ -256,7 +184,7 @@ export default function Studio() {
         {savedWords.length>0&&<div className="saved-words"><div><span className="eyebrow">YOUR COLLECTION</span><h3>Saved words <small>({savedWords.length})</small></h3></div><div className="saved-word-list">{savedWords.slice(0,30).map(r=><button key={r.record_key} onClick={()=>{const p=Number(r.data.palaceId)||1;choosePalace(p);setStop(Math.max(0,palaces[p-1]?.words.findIndex(w=>w.word===r.record_key)??0));}}>{r.record_key}<ArrowRight size={14}/></button>)}</div></div>}<div className="footer-note">Each route and mnemonic scene is written for GRE Studio. Word progress is saved to your account.</div>
       </div>}
       {view==="essays"&&<div className="feature-page"><div className="page-heading"><div><div className="eyebrow">THINK CLEARLY. WRITE BOLDLY.</div><h1>Essay practice</h1><p>Choose an issue, build your argument, and compare with a model response.</p></div><div className="heading-pill"><BookOpenText size={17}/> {essays.length} prompts</div></div><div className="essay-layout"><div className="essay-list-panel"><div className="panel-top"><div><h3>Issue prompts</h3><p>{filteredEssays.length} to explore</p></div></div><div className="search-field"><Search size={17}/><input value={essayQuery} onChange={e=>setEssayQuery(e.target.value)} placeholder="Search prompts or topics…"/></div><div className="essay-list">{filteredEssays.map(e=><button key={e.id} className={`essay-list-item ${essayId===e.id?"selected":""}`} onClick={()=>chooseEssay(e)}><span className="essay-number">{String(e.id).padStart(3,"0")}</span><span><strong>{e.topic}</strong><small>{e.category} {records[recordId("essay_draft",String(e.id))]?"· Draft saved":""}</small></span></button>)}</div></div><div className="essay-workspace">{selectedEssay?<><div className="essay-workspace-top"><span className="eyebrow">ISSUE {String(selectedEssay.id).padStart(3,"0")} · {selectedEssay.category.toUpperCase()}</span><div className="timer"><Clock3 size={17}/>{formatTime(essaySeconds)} <button onClick={()=>setEssayRunning(!essayRunning)}>{essayRunning?"Pause":"Start"}</button><button onClick={()=>{setEssayRunning(false);setEssaySeconds(1800);}} title="Reset timer"><RotateCcw size={15}/></button></div></div><h2>{selectedEssay.topic}</h2><div className="prompt-instructions">{selectedEssay.instructions}</div><div className="editor-heading"><h3>Your response</h3><span>{wordCount} words</span></div><textarea className="essay-editor" value={draft} onChange={e=>setDraft(e.target.value)} placeholder="Begin with your position, then build a clear argument with specific examples…" aria-label="Your essay response"/><div className="editor-bottom"><span><Save size={15}/> Auto-saved to your account</span><button className="button secondary small" onClick={()=>void saveRecord("essay_draft",String(selectedEssay.id),{text:draft,savedAt:new Date().toISOString()})}><Save size={16}/> Save now</button></div><div className="sample-section"><button className="sample-toggle" onClick={()=>setSampleOpen(!sampleOpen)}><span><Sparkles size={18}/> Sample response <small>{selectedEssay.word_count} words</small></span><ChevronDown className={sampleOpen?"rotated":""} size={19}/></button>{sampleOpen&&<div className="sample-copy">{selectedEssay.essay.split("\n\n").map((p,i)=><p key={i}>{p}</p>)}</div>}</div></>:<div className="empty-workspace"><div className="empty-icon"><BookOpenText size={31}/></div><h2>Make your case.</h2><p>Select a prompt on the left to start writing. Your draft saves as you go.</p><button className="button primary" onClick={()=>chooseEssay(essays[0])}>Start with prompt 001 <ArrowRight size={17}/></button></div>}</div></div><div className="footer-note">Sample responses are study models, not official scoring samples.</div></div>}
-      {view==="mock"&&<div className="feature-page"><div className="page-heading"><div><div className="eyebrow">PRACTICE UNDER REAL CONDITIONS</div><h1>Mock test</h1><p>Build endurance with a timed, original GRE-style practice test.</p></div><div className="heading-pill"><Clock3 size={17}/> 4 timed sections</div></div>{!mock?<div className="loading-panel">Loading your test…</div>:result?<div className="result-panel"><div className="result-hero"><div className="result-icon"><Trophy size={30}/></div><span className="eyebrow light">TEST COMPLETE</span><h2>Progress is something to celebrate.</h2><p>You answered <strong>{result.correct} of {result.total}</strong> questions correctly.</p><button className="button hero-button" onClick={()=>{setResult(null);beginMock();}}>Try again <RotateCcw size={17}/></button></div><div className="result-sections">{result.bySection.map(s=><div key={s.title}><strong>{s.title}</strong><span>{s.correct} / {s.total} correct</span><div className="progress-track"><i style={{width:`${100*s.correct/s.total}%`}}/></div></div>)}</div><div className="review-list"><h3>Review your answers</h3>{result.results.map((r,i)=><details key={r.id}><summary><span className={`review-status ${r.correct?"right":"wrong"}`}>{r.correct?<Check size={16}/>:<X size={16}/>}</span>Question {i+1}<span>{r.correct?"Correct":"Review"}</span></summary><div><p><b>Question:</b> {mock?.questions.find(q=>q.id===r.id)?.stem}</p><p><b>Your answer:</b> {Array.isArray(r.given)?r.given.join(", "):r.given||"No answer"}</p><p><b>Correct answer:</b> {Array.isArray(r.answer)?r.answer.join(", "):r.answer}</p><p>{r.explanation}</p></div></details>)}</div></div>:attempt?<div className="test-runner"><div className="test-toolbar"><div><span className="eyebrow">ORIGINAL PRACTICE TEST</span><h2>{mock.sections[attempt.section].title}</h2></div><div className={`test-timer ${attempt.deadline-now<60000?"urgent":""}`}><Clock3 size={18}/>{formatTime(Math.max(0,Math.ceil((attempt.deadline-now)/1000)))}</div></div><div className="test-progress"><div className="progress-track"><i style={{width:`${100*(attempt.index+1)/mock.sections[attempt.section].count}%`}}/></div><span>Question {attempt.index+1} of {mock.sections[attempt.section].count}</span></div>{(()=>{const q=mock.questions.filter(q=>q.section===attempt.section)[attempt.index];const selected=attempt.answers[q.id];return <div className="question-card"><div className="question-type">{q.type==="multi"?"SELECT TWO ANSWERS":q.type==="numeric"?"NUMERIC ENTRY":"SELECT ONE ANSWER"}</div><h3>{q.stem}</h3>{q.type==="numeric"?<input className="numeric-input" inputMode="decimal" value={typeof selected==="string"?selected:""} onChange={e=>answerMock(q,e.target.value)} placeholder="Enter your answer"/>:<div className="answer-list">{q.choices?.map((choice,i)=><button key={choice} className={`answer-option ${Array.isArray(selected)?selected.includes(choice)?"selected":"":selected===choice?"selected":""}`} onClick={()=>answerMock(q,choice)}><span>{String.fromCharCode(65+i)}</span>{choice}{(Array.isArray(selected)?selected.includes(choice):selected===choice)&&<Check size={18}/>}</button>)}</div>}</div>})()}<div className="test-footer"><button className="button secondary" disabled={attempt.index===0} onClick={()=>{const next={...attempt,index:attempt.index-1};setAttempt(next);void saveRecord("mock_attempt","active",next);}}><ArrowLeft size={17}/> Previous</button><div className="question-dots">{mock.questions.filter(q=>q.section===attempt.section).map((q,i)=><button key={q.id} className={`${i===attempt.index?"active":""} ${attempt.answers[q.id]?"answered":""}`} onClick={()=>{const next={...attempt,index:i};setAttempt(next);void saveRecord("mock_attempt","active",next);}} aria-label={`Question ${i+1}`}>{i+1}</button>)}</div><button className="button primary" disabled={mockBusy} onClick={nextQuestion}>{attempt.section===3&&attempt.index===14?"Submit test":attempt.index===mock.sections[attempt.section].count-1?"Next section":"Next question"} <ArrowRight size={17}/></button></div></div>:<div className="mock-intro"><div className="mock-intro-art"><div className="mock-badge"><Target size={40}/></div><span className="tiny-star star-one">✦</span><span className="tiny-star star-two">✦</span></div><div className="mock-intro-copy"><div className="eyebrow">A FOCUSED PRACTICE SESSION</div><h2>Ready to see where you stand?</h2><p>Work through 54 original Verbal and Quant questions in four timed sections. Your answers are saved as you go, and explanations appear after submission.</p><div className="test-format">{mock.sections.map((s,i)=><div key={s.title}><span>{String(i+1).padStart(2,"0")}</span><strong>{s.title}</strong><small>{s.count} questions · {s.minutes} min</small></div>)}</div><button className="button primary" onClick={beginMock}><Play size={17}/> Begin practice test</button><p className="test-disclaimer">Scores show raw practice accuracy. They are not official GRE scaled scores.</p></div></div>}{!attempt&&!result&&mockResults.length>0&&<div className="past-results"><h3>Past results</h3>{mockResults.slice().reverse().slice(0,5).map(r=><button key={r.record_key} onClick={()=>setResult(r.data as Result)}><span><Trophy size={17}/> {new Date(r.record_key).toLocaleDateString()}</span><strong>{r.data.correct} / {r.data.total} correct</strong><ArrowRight size={16}/></button>)}</div>}<div className="footer-note">This test uses original practice questions. It is not affiliated with or scored by ETS.</div></div>}
+      {view==="mock"&&<MockStudio />}
       </main>
     </div>
   </div>;
