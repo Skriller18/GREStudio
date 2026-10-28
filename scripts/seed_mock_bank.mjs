@@ -13,7 +13,13 @@ const endpoint = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const key = process.env.SUPABASE_SECRET_KEY;
 if (!endpoint || !key) throw Error("Supabase seed credentials missing.");
 const headers = { apikey: key, Authorization: `Bearer ${key}` };
-const questions = JSON.parse(await fs.readFile(path.join(seedDir, "questions.json"), "utf8"));
+const questionFields = ["id", "measure", "topic", "type", "difficulty", "stem", "choices",
+  "answer", "explanation", "passage", "image", "solution_image", "required",
+  "numeric_format", "choices_in_image", "source"];
+const questions = JSON.parse(await fs.readFile(path.join(seedDir, "questions.json"), "utf8"))
+  .map(question => Object.fromEntries(questionFields.map(field => [
+    field, question[field] ?? (field === "choices_in_image" ? false : field === "source" ? {} : null),
+  ])));
 const tests = JSON.parse(await fs.readFile(path.join(seedDir, "tests.json"), "utf8"));
 
 async function send(url, data, contentType, extra = {}) {
@@ -24,8 +30,10 @@ async function send(url, data, contentType, extra = {}) {
       } });
       if (response.ok) return;
       const body = await response.text();
-      if (![408, 429, 500, 502, 503, 504].includes(response.status))
-        throw Error(`HTTP ${response.status}: ${body.slice(0, 250)}`);
+      if (![408, 429, 500, 502, 503, 504].includes(response.status)) {
+        console.error(`Non-retryable HTTP ${response.status}: ${body.slice(0, 250)}`);
+        process.exit(1);
+      }
       if (n === 6) throw Error(`HTTP ${response.status}: ${body.slice(0, 250)}`);
     } catch (error) { if (n === 6) throw error; }
     await new Promise(resolve => setTimeout(resolve, Math.min(1000 * 2 ** n, 12000)));
